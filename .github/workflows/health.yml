@@ -1,0 +1,41 @@
+# Provar varje vecka att de inofficiella tjänsterna appen använder (TV4,
+# SVT, Viaplay, JustWatch, Cloudflare-mellanhanden, IMDb-filen) fungerar.
+# Misslyckas något mejlar GitHub om det misslyckade jobbet, och sammanfattningen
+# under Actions visar vad. Kan också köras för hand under Actions →
+# Hälsokontroll → Run workflow.
+name: Hälsokontroll
+
+on:
+  schedule:
+    # Tisdagar 06:23 UTC, dagen efter IMDb-jobbet, så att den nya filen
+    # också kontrolleras.
+    - cron: "23 6 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # Hålla jobbet vid liv (se sista steget).
+  actions: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Prova tjänsterna
+        run: python3 tools/health_check.py
+
+      # GitHub pausar schemalagda jobb i publika projekt efter 60 dagar utan
+      # aktivitet. Att aktivera jobbet igen nollställer den tiden. Körs även
+      # när kontrollen misslyckas.
+      - name: Håll jobbet vid liv
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow enable health.yml --repo "${{ github.repository }}"
