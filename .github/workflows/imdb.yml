@@ -1,0 +1,49 @@
+# Uppdaterar imdb.json (IMDb-betyg och topplistor för Kandenäs Stream) en
+# gång i veckan. Kan också köras för hand under Actions → "IMDb-betyg" →
+# Run workflow.
+name: IMDb-betyg
+
+on:
+  schedule:
+    # Måndagar 05:17 UTC (inte på hel timme, då GitHub är som mest belastat).
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  # Spara filen.
+  contents: write
+  # Hålla jobbet vid liv (se sista steget).
+  actions: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Bygg imdb.json
+        run: python3 tools/build_imdb.py imdb.json
+
+      - name: Spara om något har ändrats
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add imdb.json
+          if git diff --cached --quiet; then
+            echo "Inga ändringar."
+          else
+            git commit -m "IMDb-betyg $(date -u +%F)"
+            git push
+          fi
+
+      # GitHub pausar schemalagda jobb i publika projekt efter 60 dagar utan
+      # aktivitet. Att aktivera jobbet igen nollställer den tiden.
+      - name: Håll jobbet vid liv
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow enable imdb.yml --repo "${{ github.repository }}"
