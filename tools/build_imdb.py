@@ -8,7 +8,8 @@ Källor:
 - IMDb:s datafiler (https://datasets.imdbws.com, för privat och icke-
   kommersiellt bruk): betyg och antal röster per IMDb-id.
 - Wikidata: vilket TMDB-id (film P4947, serie P4983) ett IMDb-id (P345)
-  hör till.
+  hör till. Frågas via QLever (en snabb kopia av Wikidata), med Wikidatas
+  egen tjänst som reserv. Den avbryter ofta så stora frågor från GitHub.
 
 Format (kompakt, appen läser det i lib/services/imdb_ratings.dart):
 {
@@ -25,11 +26,16 @@ import gzip
 import io
 import json
 import sys
+import time
 import urllib.parse
 import urllib.request
 
 RATINGS_URL = "https://datasets.imdbws.com/title.ratings.tsv.gz"
-WIKIDATA_URL = "https://query.wikidata.org/sparql"
+# Först QLever, sedan Wikidata.
+SPARQL_ENDPOINTS = [
+    "https://qlever.dev/api/wikidata",
+    "https://query.wikidata.org/sparql",
+]
 USER_AGENT = "KandenasStream/1.0 (https://github.com/KKandenas/kandenas-stream-releases)"
 
 # Färre röster än så: betyget säger för lite och tar bara plats.
@@ -60,16 +66,38 @@ def imdb_ratings():
 
 def wikidata_mapping(tmdb_property):
     """IMDb-id -> TMDB-id för filmer (P4947) eller serier (P4983)."""
-    query = f"SELECT ?imdb ?tmdb WHERE {{ ?i wdt:{tmdb_property} ?tmdb ; wdt:P345 ?imdb . }}"
-    url = WIKIDATA_URL + "?" + urllib.parse.urlencode({"query": query})
-    text = fetch(url, {"Accept": "text/csv"}).decode("utf-8")
+    query = (
+        "PREFIX wdt: <http://www.wikidata.org/prop/direct/> "
+        f"SELECT ?imdb ?tmdb WHERE {{ ?i wdt:{tmdb_property} ?tmdb ; wdt:P345 ?imdb . }}"
+    )
+    errors = []
+    for endpoint in SPARQL_ENDPOINTS:
+        for attempt in range(3):
+            try:
+                url = endpoint + "?" + urllib.parse.urlencode({"query": query})
+                text = fetch(url, {"Accept": "text/csv"}).decode("utf-8")
+                return _parse_mapping(text)
+            except Exception as e:  # noqa: BLE001 – nästa försök eller tjänst
+                errors.append(f"{endpoint} försök {attempt + 1}: {e}")
+                time.sleep(10)
+    sys.exit("Kunde inte hämta kopplingen IMDb–TMDB:\n" + "\n".join(errors))
+
+
+def _parse_mapping(text):
+    """Kastar ValueError för ofullständiga svar (avbruten fråga)."""
     reader = csv.reader(io.StringIO(text))
-    next(reader)
+    if next(reader, None) != ["imdb", "tmdb"]:
+        raise ValueError("oväntat svar")
     mapping = {}
-    for imdb, tmdb in reader:
+    for row in reader:
+        if len(row) != 2:
+            raise ValueError(f"ofullständig rad: {row!r}"[:200])
+        imdb, tmdb = row
         if imdb.startswith("tt") and tmdb.isdigit():
             # Första vinner om ett IMDb-id har flera TMDB-id.
             mapping.setdefault(imdb, int(tmdb))
+    if len(mapping) < 1000:
+        raise ValueError(f"bara {len(mapping)} kopplingar")
     return mapping
 
 
