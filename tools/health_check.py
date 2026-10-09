@@ -61,10 +61,12 @@ def svt(query):
 
 
 JUSTWATCH_QUERY = """query S($q: String!) {
-  popularTitles(country: SE, first: 5, filter: { searchQuery: $q }) {
+  popularTitles(country: SE, first: 20, filter: { searchQuery: $q }) {
     edges { node {
       objectType
-      content(country: SE, language: "sv") { externalIds { tmdbId } }
+      content(country: SE, language: "sv") {
+        title originalTitle externalIds { tmdbId }
+      }
       offers(country: SE, platform: WEB) {
         monetizationType standardWebURL package { packageId }
       }
