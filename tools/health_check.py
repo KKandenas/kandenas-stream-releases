@@ -166,6 +166,13 @@ def check_imdb():
     assert len(data["movie"]) > 10000, "imdb.json har för få filmer"
 
 
+def check_hbomax_list():
+    """Spela: HBO Max-seriernas sidor i sport_config.json."""
+    shows = config().get("hbomaxShows") or {}
+    assert len(shows) > 100, f"hbomaxShows har bara {len(shows)} serier"
+    assert shows.get("133574") == "89849f35-30fe-4267-b964-b685fe378f2d", "Över Atlanten saknas eller har fel id"
+
+
 CHECKS = [
     check_tv4_sport,
     check_tv4_links,
@@ -175,6 +182,7 @@ CHECKS = [
     check_worker,
     check_viaplay,
     check_imdb,
+    check_hbomax_list,
 ]
 
 
