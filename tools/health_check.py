@@ -173,6 +173,20 @@ def check_hbomax_list():
     assert shows.get("133574") == "89849f35-30fe-4267-b964-b685fe378f2d", "Över Atlanten saknas eller har fel id"
 
 
+def check_tv_guide():
+    """TV: SVT:s och TV4:s tablåer."""
+    channels = svt("{ channels { channels { id name schedule { name start end } } } }")["channels"]["channels"]
+    assert any(c["id"] == "ch-svt1" and c["schedule"] for c in channels), "SVT 1 saknar tablå"
+    tv4_channels = tv4("{ channels { id title slug } }")["channels"]
+    tv4_id = next(c["id"] for c in tv4_channels if c["title"] == "TV4")
+    now = int(datetime.datetime.now().timestamp() * 1000)
+    epg = tv4(
+        f'{{ epg(channelId: "{tv4_id}", from: {now - 3 * 3600_000}, '
+        f"to: {now + 12 * 3600_000}) {{ title start end }} }}"
+    )
+    assert epg["epg"], "TV4 saknar tablå"
+
+
 CHECKS = [
     check_tv4_sport,
     check_tv4_links,
@@ -183,6 +197,7 @@ CHECKS = [
     check_viaplay,
     check_imdb,
     check_hbomax_list,
+    check_tv_guide,
 ]
 
 
